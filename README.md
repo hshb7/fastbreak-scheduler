@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fastbreak Scheduler - Developer Challenge
 
-## Getting Started
+Hey team, here is my submission for the constraint parser challenge. I built this to translate natural language into structured scheduling constraints using a hybrid approach of semantic search (Supabase) and LLMs (OpenAI).
 
-First, run the development server:
+## Live Demo
+[Insert Deployment URL Here]
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+**Test Credentials:**
+- **Email:** `cibeanu3@gmail.com`
+- **Password:** `awesome1`
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## My Approach
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The core challenge was taking messy user input (e.g., "No games on Xmas") and mapping it perfectly to one of the strict JSON templates.
 
-## Learn More
+I decided against writing complex Regex parsers because they are brittle. Instead, I used a **Search-First, Extract-Second** pipeline:
+1.  **Find the Template**: I use `pgvector` in Supabase to find the most similar "Template" based on the meaning of the user's query. This handles synonyms really well (e.g., "matchup" vs "game").
+2.  **Extract Parameters**: Once we know the specific Template, I use OpenAI's **Structured Outputs** (JSON Schema) to extract the exact parameters needed (`min`, `max`, `teams`, etc.). This guarantees type safety.
+3.  **Optimization (Caching)**: To save money and speed things up, I implemented a semantic cache. If I see a query that is semantically identical to a previous one (similarity > 99%), I serve the cached result instantly from Postgres. No API cost.
 
-To learn more about Next.js, take a look at the following resources:
+## Tech Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+-   **Frontend**: Next.js 14 (App Router), Tailwind CSS, Framer Motion (for the "tech" feel).
+-   **Backend**: Next.js API Routes.
+-   **Database**: Supabase (PostgreSQL) with `pgvector` extension.
+-   **AI**: OpenAI GPT-4o-mini (for extraction) + `text-embedding-3-small` (for vectors).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture Details
 
-## Deploy on Vercel
+-   **Why Supabase?** I needed Auth and Vector Search in one place. It was easier than spinning up Pinecone separately.
+-   **Why Structured Outputs?** The prompt engineering required to get valid JSON from older models is painful. The new `json_schema` mode makes the parser extremely reliable.
+-   **Performance**: The initial search takes ~800ms (OpenAI latency), but subsequent similar searches are <50ms thanks to the vector cache layer.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Setup Instructions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+If you want to run this locally:
+
+1.  **Clone details**
+    ```bash
+    git clone [repo-url]
+    cd fastbreak-scheduler
+    npm install
+    ```
+
+2.  **Environment Config**
+    Populate `.env.local` with your keys:
+    ```
+    NEXT_PUBLIC_SUPABASE_URL=...
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+    OPENAI_API_KEY=sk-...
+    ```
+
+3.  **Database**
+    Run the SQL in `supabase/schema.sql` to create the tables and functions.
+
+4.  **Run**
+    ```bash
+    npm run dev
+    ```
+
+## Trade-offs / Challenges
+
+-   **Latency vs. Accuracy**: Using an LLM for extraction is slower than Regex, but much more accurate for weird phrasings. I mitigated the latency with the Semantic Cache.
+-   **Template Ambiguity**: Sometimes queries look like they could fit two templates. I added a "Analysis Candidates" section in the UI to show other possible matches if the confidence is close.
+
+Overall, it was a fun challenge to balance AI with the strict requirements of a scheduling system. Let me know if you have questions!
